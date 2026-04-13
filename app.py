@@ -2,204 +2,246 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import re
-import pandas as pd
+import numpy as np
 
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
 st.set_page_config(page_title="RivalLens Pro", layout="wide")
 
-# ----------------------------
-# STYLE
-# ----------------------------
+# -----------------------------
+# CLEAN UI (FIXED COLORS)
+# -----------------------------
 st.markdown("""
 <style>
-.main { background-color: #f8fafc; }
-
-.card {
-    background: white;
-    padding: 18px;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-    margin-bottom: 15px;
+body {
+    background-color: #0e1117;
+    color: #ffffff;
 }
 
-.metric { font-size: 26px; font-weight: bold; }
-.label { color: #64748b; font-size: 14px; }
+.block-container {
+    padding-top: 2rem;
+}
 
-.green { border-left: 5px solid #22c55e; }
-.orange { border-left: 5px solid #f59e0b; }
-.blue { border-left: 5px solid #3b82f6; }
+h1, h2, h3 {
+    color: #ffffff;
+}
+
+.card {
+    background: #161b22;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    border: 1px solid #30363d;
+}
+
+.green { border-left: 4px solid #2ea043; }
+.blue { border-left: 4px solid #58a6ff; }
+.orange { border-left: 4px solid #f0883e; }
+
+.big {
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.small {
+    color: #8b949e;
+}
 
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------
-# HEADER
-# ----------------------------
-st.title("🔎 RivalLens Pro")
-st.caption("Competitor pricing intelligence dashboard")
+# -----------------------------
+# URL FIX
+# -----------------------------
+def fix_url(url):
+    if not url.startswith("http"):
+        return "https://" + url
+    return url
 
-url = st.text_input("Enter competitor website")
-
-# ----------------------------
+# -----------------------------
 # SCRAPER
-# ----------------------------
+# -----------------------------
 def get_prices(url):
     try:
-        if not url.startswith("http"):
-            url = "https://" + url
+        url = fix_url(url)
 
         headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=10)
 
-        soup = BeautifulSoup(res.text, "html.parser")
+        soup = BeautifulSoup(r.text, "html.parser")
         text = soup.get_text()
 
         prices = re.findall(r"\$\s?\d+(?:\.\d{1,2})?", text)
-        return list(set(prices))[:30]
+
+        nums = [float(p.replace("$", "").strip()) for p in prices]
+
+        return nums[:30]
 
     except:
         return []
 
-# ----------------------------
-# ANALYSIS
-# ----------------------------
-def analyze(prices):
-    nums = []
-
-    for p in prices:
-        try:
-            nums.append(float(p.replace("$","")))
-        except:
-            pass
+# -----------------------------
+# DEEP ANALYSIS ENGINE
+# -----------------------------
+def deep_analysis(nums):
 
     if not nums:
-        return None
+        return {}, ["No pricing data detected"], ["Manual review required"]
 
-    avg = sum(nums)/len(nums)
-    low, high = min(nums), max(nums)
-
-    if avg < 50:
-        level = "Low-cost"
-    elif avg < 150:
-        level = "Mid-range"
-    else:
-        level = "Premium"
-
+    avg = np.mean(nums)
+    low = min(nums)
+    high = max(nums)
     spread = high - low
 
-    if spread < 30:
-        strategy = "Flat"
-    elif spread < 100:
-        strategy = "Tiered"
+    insights = []
+    actions = []
+
+    # POSITION
+    if avg < 50:
+        position = "Low-cost"
+    elif avg < 150:
+        position = "Mid-market"
     else:
-        strategy = "Wide"
+        position = "Premium"
 
-    return nums, level, low, high, strategy
+    # STRATEGY
+    if spread > 100:
+        strategy = "Multi-tier segmentation"
+        insights.append("Wide pricing range → multiple customer segments targeted")
+        actions.append("Exploit gaps between tiers with focused offer")
 
-# ----------------------------
-# SCORE SYSTEM
-# ----------------------------
-def score(level, strategy, count):
-    s = 0
+    elif spread < 30:
+        strategy = "Flat pricing"
+        insights.append("Tight pricing → weak differentiation")
+        actions.append("Introduce clearer tiers to outperform")
 
-    if level == "Premium":
-        s += 30
-    elif level == "Mid-range":
-        s += 20
     else:
-        s += 10
+        strategy = "Moderate tiered pricing"
+        insights.append("Balanced pricing structure → standard competitive setup")
 
-    if strategy == "Tiered":
-        s += 30
-    elif strategy == "Wide":
-        s += 20
+    # PSYCHOLOGY
+    endings = [str(n).split('.')[-1] for n in nums if '.' in str(n)]
+    if any(e in ["99", "95"] for e in endings):
+        insights.append("Uses psychological pricing (.99/.95) → conversion focused")
+    else:
+        insights.append("Rounded pricing → premium or simplified positioning")
 
-    if count > 10:
-        s += 20
+    # CUSTOMER TARGET
+    if avg < 50:
+        insights.append("Targeting price-sensitive customers")
+        actions.append("Compete with branding, not price war")
 
-    return min(s,100)
+    elif avg < 150:
+        insights.append("Targeting mass market")
+        actions.append("Differentiate strongly — avoid middle positioning")
 
-# ----------------------------
-# GAP DETECTION
-# ----------------------------
-def gap_analysis(level, strategy):
-    gaps = []
+    else:
+        insights.append("Targeting premium buyers")
+        actions.append("Win via authority, trust, and brand perception")
 
-    if level != "Premium":
-        gaps.append("Opportunity to introduce premium tier")
+    # PRODUCT DEPTH
+    if len(nums) > 15:
+        insights.append("Large catalog → volume-based strategy")
+        actions.append("Win by specializing in a niche")
 
-    if strategy != "Tiered":
-        gaps.append("Lack of structured pricing tiers")
+    else:
+        insights.append("Focused offering → niche positioning")
 
-    gaps.append("Potential weak differentiation")
+    # WEAKNESSES
+    if spread < 40:
+        insights.append("Weak tier separation → opportunity to outperform with clear pricing ladder")
+        actions.append("Create 3 clear packages (basic / pro / premium)")
 
-    return gaps
+    # SCORE
+    score = int((spread + avg) / 2)
+    score = max(30, min(score, 95))
 
-# ----------------------------
-# RUN
-# ----------------------------
+    return {
+        "avg": avg,
+        "low": low,
+        "high": high,
+        "position": position,
+        "strategy": strategy,
+        "score": score
+    }, insights, actions
+
+
+# -----------------------------
+# UI
+# -----------------------------
+st.title("🔎 RivalLens Pro")
+st.caption("Real competitor pricing intelligence")
+
+url = st.text_input("Enter competitor website")
+
 if st.button("Analyze"):
 
     prices = get_prices(url)
-    result = analyze(prices)
+    data, insights, actions = deep_analysis(prices)
 
-    if not result:
-        st.warning("No pricing data found")
-    else:
-        nums, level, low, high, strategy = result
+    st.markdown(f"### 🔍 {fix_url(url)}")
 
-        comp_score = score(level, strategy, len(nums))
-        gaps = gap_analysis(level, strategy)
+    # -----------------------------
+    # SUMMARY CARDS
+    # -----------------------------
+    col1, col2, col3, col4 = st.columns(4)
 
-        st.markdown(f"## 🔍 {url}")
-
-        # ----------------------------
-        # SUMMARY
-        # ----------------------------
-        col1, col2, col3, col4 = st.columns(4)
-
-        col1.markdown(f'<div class="card green"><div class="label">Position</div><div class="metric">{level}</div></div>', unsafe_allow_html=True)
-        col2.markdown(f'<div class="card blue"><div class="label">Range</div><div class="metric">${low:.0f}–${high:.0f}</div></div>', unsafe_allow_html=True)
-        col3.markdown(f'<div class="card orange"><div class="label">Strategy</div><div class="metric">{strategy}</div></div>', unsafe_allow_html=True)
-        col4.markdown(f'<div class="card"><div class="label">Score</div><div class="metric">{comp_score}/100</div></div>', unsafe_allow_html=True)
-
-        # ----------------------------
-        # CHART
-        # ----------------------------
-        st.markdown("## 📊 Price Distribution")
-
-        df = pd.DataFrame(nums, columns=["Price"])
-        st.bar_chart(df)
-
-        # ----------------------------
-        # INSIGHTS
-        # ----------------------------
-        st.markdown("## 🧠 Insights")
-
+    with col1:
         st.markdown(f"""
         <div class="card green">
-        Competitor operates in <b>{level}</b> segment with <b>{strategy}</b> pricing.
+        <div class="small">Position</div>
+        <div class="big">{data.get('position')}</div>
         </div>
         """, unsafe_allow_html=True)
 
-        # ----------------------------
-        # GAPS
-        # ----------------------------
-        st.markdown("## 🕳 Market Gaps")
-
-        for g in gaps:
-            st.markdown(f'<div class="card orange">{g}</div>', unsafe_allow_html=True)
-
-        # ----------------------------
-        # ACTIONS
-        # ----------------------------
-        st.markdown("## 🚀 Strategy")
-
+    with col2:
         st.markdown(f"""
         <div class="card blue">
-        - Position slightly above or below {level} competitor  
-        - Introduce clearer pricing tiers  
-        - Improve perceived value vs price  
+        <div class="small">Price Range</div>
+        <div class="big">${int(data.get('low',0))} - ${int(data.get('high',0))}</div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.success("Analysis Complete")
+    with col3:
+        st.markdown(f"""
+        <div class="card orange">
+        <div class="small">Strategy</div>
+        <div class="big">{data.get('strategy')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div class="card">
+        <div class="small">Score</div>
+        <div class="big">{data.get('score')}/100</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # -----------------------------
+    # CHART
+    # -----------------------------
+    if prices:
+        st.subheader("📊 Price Distribution")
+        st.bar_chart(prices)
+
+    # -----------------------------
+    # INSIGHTS
+    # -----------------------------
+    st.subheader("🧠 Insights")
+    for i in insights:
+        st.markdown(f"""
+        <div class="card green">{i}</div>
+        """, unsafe_allow_html=True)
+
+    # -----------------------------
+    # ACTION PLAN
+    # -----------------------------
+    st.subheader("🚀 What You Should Do")
+    for a in actions:
+        st.markdown(f"""
+        <div class="card orange">{a}</div>
+        """, unsafe_allow_html=True)
+
+    st.success("Analysis complete")
