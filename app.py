@@ -1,92 +1,56 @@
-import os
+import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-from crewai import Agent, Task, Crew
 
-# 🔐 Your API key
-import os
-
-
-# 🧠 LLM
-llm = "gpt-4o-mini"
-
-# 🌐 Function to scrape prices
+# -----------------------------
+# 🔍 Simple price scraper
+# -----------------------------
 def get_prices(url):
     try:
-        response = requests.get(url, timeout=10)
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        prices = []
-        for tag in soup.find_all(["span", "div", "p"]):
-            text = tag.get_text()
-            if "$" in text:
-                prices.append(text.strip())
+        text = soup.get_text()
 
-        return list(set(prices))[:10]
+        import re
+        prices = re.findall(r"\$\d+(?:\.\d{1,2})?", text)
 
-    except:
-        return ["Could not extract prices"]
+        return prices[:5] if prices else ["No prices found"]
 
-# 👇 Ask user for website
-while True:
-    url = input("\nEnter competitor website (or type 'exit'): ")
+    except Exception as e:
+        return [f"Error: {str(e)}"]
 
-    if url.lower() == "exit":
-        break
 
-    prices = get_prices(url)
+# -----------------------------
+# 🎯 UI
+# -----------------------------
+st.title("RivalLens 🔍")
+st.write("AI-powered competitor pricing analysis")
 
-    task = Task(
-        description=f"""
-        Competitor website: {url}
+url = st.text_input("Enter competitor website (e.g. https://example.com)")
 
-        Detected prices: {prices}
+if st.button("Analyze"):
+    if not url:
+        st.warning("Please enter a website URL")
+    else:
+        st.write("Analyzing:", url)
 
-        Analyze:
-        1. Pricing strategy
-        2. Market positioning
-        3. What we should do
-        """,
-        expected_output="Clear pricing strategy and recommendation",
-        agent=agent
-    )
+        prices = get_prices(url)
 
-    crew = Crew(agents=[agent], tasks=[task])
-    result = crew.kickoff()
+        st.subheader("💰 Detected Prices")
+        st.write(prices)
 
-    print("\n=== COMPETITOR ANALYSIS ===\n")
-    print(result)
+        # Simple analysis (no API needed yet)
+        if "Error" in prices[0]:
+            st.error("Failed to fetch website")
+        elif prices == ["No prices found"]:
+            st.info("No pricing detected on this page")
+        else:
+            st.subheader("📊 Basic Insight")
 
-# 🔍 Get prices
-prices = get_prices(url)
+            st.write("• Competitor likely uses visible pricing")
+            st.write("• Consider undercutting or bundling strategy")
+            st.write("• Opportunity: add value instead of price war")
 
-# 🤖 Agent
-agent = Agent(
-    role="Competitor Analyst",
-    goal="Analyze competitor pricing and suggest strategy",
-    backstory="Expert in pricing strategy and e-commerce",
-    llm=llm
-)
-
-# 📋 Task
-task = Task(
-    description=f"""
-    Competitor website: {url}
-
-    Detected prices: {prices}
-
-    Analyze:
-    1. Pricing strategy
-    2. Market positioning
-    3. What we should do
-    """,
-    expected_output="Clear pricing strategy and recommendation",
-    agent=agent
-)
-
-# 🚀 Run
-crew = Crew(agents=[agent], tasks=[task])
-result = crew.kickoff()
-
-print("\n=== COMPETITOR ANALYSIS ===\n")
-print(result)
+        st.success("Done ✅")
