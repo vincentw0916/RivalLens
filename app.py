@@ -4,68 +4,56 @@ from bs4 import BeautifulSoup
 import re
 import numpy as np
 
-# -----------------------------
-# PAGE CONFIG
-# -----------------------------
 st.set_page_config(page_title="RivalLens Pro", layout="wide")
 
-# -----------------------------
-# CLEAN UI (FIXED COLORS)
-# -----------------------------
+# --------------------------
+# CLEAN DARK UI (FIXED)
+# --------------------------
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
-    color: #ffffff;
-}
-
-.block-container {
-    padding-top: 2rem;
-}
-
-h1, h2, h3 {
-    color: #ffffff;
-}
+body { background-color: #0e1117; color: #e6edf3; }
 
 .card {
     background: #161b22;
     padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 15px;
+    border-radius: 10px;
     border: 1px solid #30363d;
+    margin-bottom: 15px;
 }
 
-.green { border-left: 4px solid #2ea043; }
-.blue { border-left: 4px solid #58a6ff; }
-.orange { border-left: 4px solid #f0883e; }
-
-.big {
-    font-size: 22px;
+.metric {
+    font-size: 26px;
     font-weight: bold;
+    color: #ffffff;
 }
 
-.small {
+.label {
     color: #8b949e;
+    font-size: 14px;
+}
+
+.section-title {
+    font-size: 22px;
+    margin-top: 30px;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
+# --------------------------
 # URL FIX
-# -----------------------------
+# --------------------------
 def fix_url(url):
     if not url.startswith("http"):
         return "https://" + url
     return url
 
-# -----------------------------
+# --------------------------
 # SCRAPER
-# -----------------------------
+# --------------------------
 def get_prices(url):
     try:
         url = fix_url(url)
-
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=10)
 
@@ -73,7 +61,6 @@ def get_prices(url):
         text = soup.get_text()
 
         prices = re.findall(r"\$\s?\d+(?:\.\d{1,2})?", text)
-
         nums = [float(p.replace("$", "").strip()) for p in prices]
 
         return nums[:30]
@@ -81,23 +68,31 @@ def get_prices(url):
     except:
         return []
 
-# -----------------------------
-# DEEP ANALYSIS ENGINE
-# -----------------------------
-def deep_analysis(nums):
+# --------------------------
+# ADVANCED ANALYSIS
+# --------------------------
+def analyze(nums):
 
     if not nums:
-        return {}, ["No pricing data detected"], ["Manual review required"]
+        return None
 
     avg = np.mean(nums)
+    median = np.median(nums)
     low = min(nums)
     high = max(nums)
     spread = high - low
 
-    insights = []
-    actions = []
+    # Tier detection
+    tiers = len(set(nums))
 
-    # POSITION
+    if tiers <= 3:
+        tier_type = "Simple pricing"
+    elif tiers <= 8:
+        tier_type = "Tiered pricing"
+    else:
+        tier_type = "Complex catalog pricing"
+
+    # Positioning
     if avg < 50:
         position = "Low-cost"
     elif avg < 150:
@@ -105,143 +100,128 @@ def deep_analysis(nums):
     else:
         position = "Premium"
 
-    # STRATEGY
-    if spread > 100:
-        strategy = "Multi-tier segmentation"
-        insights.append("Wide pricing range → multiple customer segments targeted")
-        actions.append("Exploit gaps between tiers with focused offer")
-
-    elif spread < 30:
-        strategy = "Flat pricing"
-        insights.append("Tight pricing → weak differentiation")
-        actions.append("Introduce clearer tiers to outperform")
-
-    else:
-        strategy = "Moderate tiered pricing"
-        insights.append("Balanced pricing structure → standard competitive setup")
-
-    # PSYCHOLOGY
-    endings = [str(n).split('.')[-1] for n in nums if '.' in str(n)]
-    if any(e in ["99", "95"] for e in endings):
-        insights.append("Uses psychological pricing (.99/.95) → conversion focused")
-    else:
-        insights.append("Rounded pricing → premium or simplified positioning")
-
-    # CUSTOMER TARGET
-    if avg < 50:
-        insights.append("Targeting price-sensitive customers")
-        actions.append("Compete with branding, not price war")
-
-    elif avg < 150:
-        insights.append("Targeting mass market")
-        actions.append("Differentiate strongly — avoid middle positioning")
-
-    else:
-        insights.append("Targeting premium buyers")
-        actions.append("Win via authority, trust, and brand perception")
-
-    # PRODUCT DEPTH
-    if len(nums) > 15:
-        insights.append("Large catalog → volume-based strategy")
-        actions.append("Win by specializing in a niche")
-
-    else:
-        insights.append("Focused offering → niche positioning")
-
-    # WEAKNESSES
-    if spread < 40:
-        insights.append("Weak tier separation → opportunity to outperform with clear pricing ladder")
-        actions.append("Create 3 clear packages (basic / pro / premium)")
-
-    # SCORE
-    score = int((spread + avg) / 2)
-    score = max(30, min(score, 95))
-
     return {
         "avg": avg,
+        "median": median,
         "low": low,
         "high": high,
-        "position": position,
-        "strategy": strategy,
-        "score": score
-    }, insights, actions
+        "spread": spread,
+        "tiers": tiers,
+        "tier_type": tier_type,
+        "position": position
+    }
 
-
-# -----------------------------
+# --------------------------
 # UI
-# -----------------------------
+# --------------------------
 st.title("🔎 RivalLens Pro")
-st.caption("Real competitor pricing intelligence")
+st.caption("Competitor pricing intelligence (real analysis)")
 
 url = st.text_input("Enter competitor website")
 
 if st.button("Analyze"):
 
     prices = get_prices(url)
-    data, insights, actions = deep_analysis(prices)
+    data = analyze(prices)
 
     st.markdown(f"### 🔍 {fix_url(url)}")
 
-    # -----------------------------
-    # SUMMARY CARDS
-    # -----------------------------
-    col1, col2, col3, col4 = st.columns(4)
+    # --------------------------
+    # SUMMARY
+    # --------------------------
+    if data:
+        col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        st.markdown(f"""
-        <div class="card green">
-        <div class="small">Position</div>
-        <div class="big">{data.get('position')}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"""
-        <div class="card blue">
-        <div class="small">Price Range</div>
-        <div class="big">${int(data.get('low',0))} - ${int(data.get('high',0))}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown(f"""
-        <div class="card orange">
-        <div class="small">Strategy</div>
-        <div class="big">{data.get('strategy')}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        st.markdown(f"""
+        col1.markdown(f"""
         <div class="card">
-        <div class="small">Score</div>
-        <div class="big">{data.get('score')}/100</div>
+        <div class="label">Position</div>
+        <div class="metric">{data['position']}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # -----------------------------
-    # CHART
-    # -----------------------------
-    if prices:
-        st.subheader("📊 Price Distribution")
-        st.bar_chart(prices)
-
-    # -----------------------------
-    # INSIGHTS
-    # -----------------------------
-    st.subheader("🧠 Insights")
-    for i in insights:
-        st.markdown(f"""
-        <div class="card green">{i}</div>
+        col2.markdown(f"""
+        <div class="card">
+        <div class="label">Price Range</div>
+        <div class="metric">${int(data['low'])} - ${int(data['high'])}</div>
+        </div>
         """, unsafe_allow_html=True)
 
-    # -----------------------------
-    # ACTION PLAN
-    # -----------------------------
-    st.subheader("🚀 What You Should Do")
-    for a in actions:
-        st.markdown(f"""
-        <div class="card orange">{a}</div>
+        col3.markdown(f"""
+        <div class="card">
+        <div class="label">Median Price</div>
+        <div class="metric">${int(data['median'])}</div>
+        </div>
         """, unsafe_allow_html=True)
 
-    st.success("Analysis complete")
+        col4.markdown(f"""
+        <div class="card">
+        <div class="label">Pricing Model</div>
+        <div class="metric">{data['tier_type']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # --------------------------
+        # BETTER GRAPH
+        # --------------------------
+        st.markdown("### 📊 Price Distribution")
+
+        st.write("This shows how prices are spread across their offering.")
+
+        hist = np.histogram(prices, bins=5)
+
+        chart_data = {
+            "Range": [f"${int(hist[1][i])}-{int(hist[1][i+1])}" for i in range(len(hist[0]))],
+            "Count": hist[0]
+        }
+
+        st.bar_chart(chart_data, x="Range", y="Count")
+
+        # --------------------------
+        # INSIGHTS (REAL)
+        # --------------------------
+        st.markdown("### 🧠 Insights")
+
+        insights = []
+
+        if data["spread"] > 100:
+            insights.append("Wide pricing spread → targeting multiple customer segments")
+
+        if data["median"] < data["avg"]:
+            insights.append("Higher-end skew → premium products influence pricing")
+
+        if data["tiers"] > 10:
+            insights.append("Large catalog → volume-based strategy")
+
+        if data["spread"] < 40:
+            insights.append("Tight pricing → weak differentiation opportunity")
+
+        if data["position"] == "Low-cost":
+            insights.append("Competing on price → likely thin margins")
+
+        for i in insights:
+            st.markdown(f"<div class='card'>{i}</div>", unsafe_allow_html=True)
+
+        # --------------------------
+        # ACTIONABLE STRATEGY
+        # --------------------------
+        st.markdown("### 🚀 What You Should Do")
+
+        actions = []
+
+        if data["position"] == "Low-cost":
+            actions.append("Avoid price war → compete with branding or bundles")
+
+        if data["spread"] < 40:
+            actions.append("Introduce clear pricing tiers to outperform")
+
+        if data["tiers"] > 10:
+            actions.append("Niche down instead of competing broadly")
+
+        if data["median"] > 80:
+            actions.append("Undercut slightly to capture conversions")
+
+        for a in actions:
+            st.markdown(f"<div class='card'>{a}</div>", unsafe_allow_html=True)
+
+    else:
+        st.error("No pricing data detected (JS-based or hidden pricing)")
