@@ -3,218 +3,205 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import numpy as np
+import matplotlib.pyplot as plt
+from openai import OpenAI
+import json
+import os
 
-st.set_page_config(page_title="RivalLens Pro", layout="wide")
+# ------------------------
+# Setup
+# ------------------------
+st.set_page_config(page_title="RivalLens Pro V9", layout="wide")
 
-# ---------------- UI FIX (HIGH CONTRAST) ----------------
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+DATA_FILE = "history.json"
+
+# ------------------------
+# Storage (simple local DB)
+# ------------------------
+def load_history():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_history(entry):
+    history = load_history()
+    history.append(entry)
+    with open(DATA_FILE, "w") as f:
+        json.dump(history, f)
+
+# ------------------------
+# Styling (FIXED)
+# ------------------------
 st.markdown("""
 <style>
-body { background-color: #0e1117; }
-
+body { background-color: #0f172a; color: #e5e7eb; }
 .card {
-    background: #161b22;
-    padding: 18px;
-    border-radius: 10px;
-    border: 1px solid #30363d;
-    margin-bottom: 12px;
-    color: white;
-}
-
-.metric {
-    font-size: 26px;
-    font-weight: bold;
-    color: white;
-}
-
-.label {
-    color: #9da7b3;
-    font-size: 13px;
-}
-
-.section {
-    margin-top: 30px;
+    background: #111827;
+    padding: 20px;
+    border-radius: 12px;
     margin-bottom: 10px;
-    font-size: 22px;
-    font-weight: bold;
     color: white;
 }
-
+.green { border-left: 5px solid #22c55e; }
+.blue { border-left: 5px solid #3b82f6; }
+.orange { border-left: 5px solid #f59e0b; }
+.red { border-left: 5px solid #ef4444; }
+.title { font-size: 34px; font-weight: 700; }
+.subtitle { color: #9ca3af; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- URL FIX ----------------
-def fix_url(url):
+# ------------------------
+# Helpers
+# ------------------------
+def normalize_url(url):
     if not url.startswith("http"):
         return "https://" + url
     return url
 
-# ---------------- SCRAPER ----------------
 def get_prices(url):
     try:
-        url = fix_url(url)
+        url = normalize_url(url)
         headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(res.text, "html.parser")
 
-        soup = BeautifulSoup(r.text, "html.parser")
         text = soup.get_text()
-
         prices = re.findall(r"\$\s?\d+(?:\.\d{1,2})?", text)
-        nums = [float(p.replace("$", "").strip()) for p in prices]
 
-        return nums[:30]
+        return list(set(prices))[:20]
     except:
         return []
 
-# ---------------- DEEP ANALYSIS ----------------
-def analyze(nums):
+def clean_prices(prices):
+    nums = []
+    for p in prices:
+        try:
+            nums.append(float(p.replace("$", "")))
+        except:
+            pass
+    return nums
 
-    avg = np.mean(nums)
-    median = np.median(nums)
-    low = min(nums)
-    high = max(nums)
-    spread = high - low
-
-    tiers = len(set(nums))
-
-    insights = []
-    actions = []
-
-    # POSITION
-    if avg < 50:
-        position = "Low-cost"
-    elif avg < 150:
-        position = "Mid-market"
-    else:
-        position = "Premium"
-
-    # STRUCTURE
-    if tiers <= 3:
-        structure = "Simple pricing"
-        insights.append("Very limited pricing tiers → weak segmentation strategy")
-        actions.append("Introduce multiple tiers to capture different customer groups")
-
-    elif tiers <= 10:
-        structure = "Tiered pricing"
-        insights.append("Uses structured pricing tiers → standard competitive model")
-
-    else:
-        structure = "Complex catalog"
-        insights.append("Large number of price points → broad product coverage")
-        actions.append("Focus on a niche instead of competing broadly")
-
-    # SPREAD ANALYSIS
-    if spread < 40:
-        insights.append("Tight price range → poor differentiation")
-        actions.append("Create clear premium vs budget tiers to stand out")
-
-    elif spread > 100:
-        insights.append("Wide pricing spread → targeting multiple segments")
-        actions.append("Identify and dominate one profitable segment")
-
-    # PRICING PSYCHOLOGY
-    endings = [str(n).split('.')[-1] for n in nums if '.' in str(n)]
-    if any(e in ["99", "95"] for e in endings):
-        insights.append("Uses psychological pricing (.99/.95) → optimized for conversions")
-    else:
-        insights.append("Rounded pricing → likely premium or simplified positioning")
-
-    # COMPETITIVE LOGIC
-    if position == "Low-cost":
-        insights.append("Competing primarily on price → likely thin margins and high competition")
-        actions.append("Avoid price war — win via branding, bundles, or perceived value")
-
-    elif position == "Mid-market":
-        insights.append("Positioned in the middle → risk of being undifferentiated")
-        actions.append("Move clearly upmarket or downmarket to avoid being stuck")
-
-    else:
-        insights.append("Premium positioning → strong margins but smaller audience")
-        actions.append("Win through brand authority and trust signals")
-
-    return {
-        "avg": avg,
-        "median": median,
-        "low": low,
-        "high": high,
-        "spread": spread,
-        "tiers": tiers,
-        "structure": structure,
-        "position": position
-    }, insights, actions
-
-# ---------------- UI ----------------
-st.title("🔎 RivalLens Pro")
-st.caption("Deep competitor pricing intelligence")
-
-url = st.text_input("Enter competitor website")
-
-if st.button("Analyze"):
-
-    prices = get_prices(url)
+# ------------------------
+# AI Analysis (STRUCTURED)
+# ------------------------
+def ai_analysis(prices, url):
 
     if not prices:
-        st.error("No pricing data detected (site may use JavaScript or hidden pricing)")
-        st.stop()
+        return {
+            "positioning": "Unknown",
+            "strategy": "Hidden pricing",
+            "insights": ["No visible pricing detected"],
+            "actions": ["Manual review required"]
+        }
 
-    data, insights, actions = analyze(prices)
+    prompt = f"""
+You are a senior competitive strategy consultant.
 
-    st.markdown(f"### 🔍 {fix_url(url)}")
+Data:
+Prices: {prices}
+Website: {url}
 
-    # -------- SUMMARY --------
-    col1, col2, col3, col4 = st.columns(4)
+Return STRICT JSON:
+{{
+"positioning": "",
+"strategy": "",
+"insights": ["", "", "", "", ""],
+"actions": ["", "", "", "", ""]
+}}
+"""
 
-    col1.markdown(f"""
-    <div class="card">
-    <div class="label">Position</div>
-    <div class="metric">{data['position']}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
 
-    col2.markdown(f"""
-    <div class="card">
-    <div class="label">Price Range</div>
-    <div class="metric">${int(data['low'])} - ${int(data['high'])}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    try:
+        return json.loads(response.choices[0].message.content)
+    except:
+        return {
+            "positioning": "Error",
+            "strategy": "Parsing failed",
+            "insights": ["AI output error"],
+            "actions": ["Retry"]
+        }
 
-    col3.markdown(f"""
-    <div class="card">
-    <div class="label">Median</div>
-    <div class="metric">${int(data['median'])}</div>
-    </div>
-    """, unsafe_allow_html=True)
+# ------------------------
+# UI Layout
+# ------------------------
+st.markdown('<div class="title">🔎 RivalLens Pro</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Competitor pricing intelligence dashboard</div>', unsafe_allow_html=True)
 
-    col4.markdown(f"""
-    <div class="card">
-    <div class="label">Model</div>
-    <div class="metric">{data['structure']}</div>
-    </div>
-    """, unsafe_allow_html=True)
+tab1, tab2 = st.tabs(["📊 Analyze", "📁 History"])
 
-    # -------- GRAPH --------
-    st.markdown('<div class="section">📊 Price Distribution</div>', unsafe_allow_html=True)
+# ========================
+# TAB 1: ANALYZE
+# ========================
+with tab1:
 
-    hist = np.histogram(prices, bins=5)
+    url = st.text_input("Enter competitor website")
 
-    chart_data = {
-        "Range": [f"${int(hist[1][i])}-{int(hist[1][i+1])}" for i in range(len(hist[0]))],
-        "Count": hist[0]
-    }
+    if st.button("Analyze"):
 
-    st.bar_chart(chart_data, x="Range", y="Count")
+        with st.spinner("Running analysis..."):
 
-    st.caption("Shows how many products fall into each price range")
+            raw = get_prices(url)
+            prices = clean_prices(raw)
+            analysis = ai_analysis(prices, url)
 
-    # -------- INSIGHTS --------
-    st.markdown('<div class="section">🧠 Insights</div>', unsafe_allow_html=True)
+        st.markdown(f"### 🔗 {normalize_url(url)}")
 
-    for i in insights:
-        st.markdown(f"<div class='card'>{i}</div>", unsafe_allow_html=True)
+        # Summary
+        if prices:
+            min_p, max_p = min(prices), max(prices)
+            avg = round(np.mean(prices), 2)
 
-    # -------- ACTIONS --------
-    st.markdown('<div class="section">🚀 What You Should Do</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f'<div class="card green"><b>Position</b><br>{analysis["positioning"]}</div>', unsafe_allow_html=True)
+            c2.markdown(f'<div class="card blue"><b>Range</b><br>${min_p} - ${max_p}</div>', unsafe_allow_html=True)
+            c3.markdown(f'<div class="card orange"><b>Strategy</b><br>{analysis["strategy"]}</div>', unsafe_allow_html=True)
 
-    for a in actions:
-        st.markdown(f"<div class='card'>{a}</div>", unsafe_allow_html=True)
+            # Chart
+            st.subheader("📊 Price Distribution")
+            fig, ax = plt.subplots()
+            ax.hist(prices, bins=5)
+            ax.set_xlabel("Price ($)")
+            ax.set_ylabel("Count")
+            st.pyplot(fig)
 
-    st.success("Analysis complete")
+        else:
+            st.warning("No prices found")
+
+        # Insights
+        st.subheader("🧠 Insights")
+        for i in analysis["insights"]:
+            st.markdown(f'<div class="card green">{i}</div>', unsafe_allow_html=True)
+
+        # Actions
+        st.subheader("🚀 Strategy")
+        for a in analysis["actions"]:
+            st.markdown(f'<div class="card orange">{a}</div>', unsafe_allow_html=True)
+
+        # Save
+        save_history({
+            "url": url,
+            "prices": prices,
+            "analysis": analysis
+        })
+
+# ========================
+# TAB 2: HISTORY
+# ========================
+with tab2:
+
+    history = load_history()
+
+    if not history:
+        st.info("No history yet")
+    else:
+        for item in reversed(history[-10:]):
+            st.markdown(f"### 🔗 {item['url']}")
+            st.write(item["analysis"]["positioning"], "-", item["analysis"]["strategy"])
