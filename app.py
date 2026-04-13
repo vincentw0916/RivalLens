@@ -6,49 +6,70 @@ import re
 # ----------------------------
 # PAGE CONFIG
 # ----------------------------
-st.set_page_config(
-    page_title="RivalLens",
-    page_icon="🔎",
-    layout="wide"
-)
+st.set_page_config(page_title="RivalLens", layout="wide")
 
 # ----------------------------
-# PREMIUM STYLING
+# CLEAN LIGHT + PREMIUM STYLE
 # ----------------------------
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
+html, body, [class*="css"] {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
+/* MAIN BACKGROUND */
 .main {
-    background-color: #0e1117;
+    background-color: #f8fafc;
 }
-h1, h2, h3, h4 {
-    color: white;
+
+/* HEADINGS */
+h1 {
+    font-size: 42px;
+    font-weight: 700;
+    color: #0f172a;
 }
-p, li {
-    color: #c9d1d9;
+
+h2 {
+    color: #0f172a;
+    margin-top: 30px;
 }
+
+/* CARD */
 .card {
-    background-color: #161b22;
+    background: white;
     padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 15px;
-    border: 1px solid #30363d;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    margin-bottom: 16px;
 }
-.highlight-green {
-    border-left: 5px solid #3fb950;
-}
-.highlight-orange {
-    border-left: 5px solid #d29922;
-}
+
+/* METRICS */
 .metric {
     font-size: 28px;
-    font-weight: bold;
+    font-weight: 700;
+    color: #0f172a;
 }
-.subtle {
-    color: #8b949e;
+
+.label {
+    color: #64748b;
     font-size: 14px;
+}
+
+/* TAG COLORS */
+.green { border-left: 5px solid #22c55e; }
+.orange { border-left: 5px solid #f59e0b; }
+.blue { border-left: 5px solid #3b82f6; }
+
+/* PRICE TAG */
+.price {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+}
+
+/* SECTION SPACING */
+.block {
+    margin-top: 30px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -57,10 +78,8 @@ p, li {
 # HEADER
 # ----------------------------
 st.markdown("""
-# 🔎 RivalLens
-
-### Smarter competitor pricing intelligence  
-Understand positioning. Beat competitors. Win faster.
+# 🔎 RivalLens  
+Smarter competitor pricing intelligence  
 """)
 
 # ----------------------------
@@ -80,33 +99,32 @@ def get_prices(url):
         res = requests.get(url, headers=headers, timeout=10)
 
         soup = BeautifulSoup(res.text, "html.parser")
-
         text = soup.get_text()
-        prices = re.findall(r"\$\s?\d+(?:\.\d{1,2})?", text)
 
+        prices = re.findall(r"\$\s?\d+(?:\.\d{1,2})?", text)
         return list(set(prices))[:20]
 
-    except Exception:
+    except:
         return []
 
 # ----------------------------
-# SMART ANALYSIS
+# ANALYSIS
 # ----------------------------
 def analyze_prices(prices):
-    numeric = []
+    nums = []
 
     for p in prices:
         try:
-            numeric.append(float(p.replace("$", "").strip()))
+            nums.append(float(p.replace("$", "")))
         except:
             pass
 
-    if not numeric:
-        return "Unknown", "No range", "No pricing detected"
+    if not nums:
+        return "Unknown", "No range", "No data"
 
-    avg = sum(numeric) / len(numeric)
-    low = min(numeric)
-    high = max(numeric)
+    avg = sum(nums) / len(nums)
+    low = min(nums)
+    high = max(nums)
 
     if avg < 50:
         level = "Low-cost"
@@ -120,98 +138,88 @@ def analyze_prices(prices):
     if spread < 30:
         strategy = "Flat pricing"
     elif spread < 100:
-        strategy = "Moderate tiered pricing"
+        strategy = "Tiered pricing"
     else:
-        strategy = "Wide tiered pricing"
+        strategy = "Wide pricing model"
 
-    return level, f"${low:.0f} - ${high:.0f}", strategy
+    return level, f"${low:.0f} – ${high:.0f}", strategy
 
 # ----------------------------
-# INSIGHTS ENGINE
+# INSIGHTS
 # ----------------------------
-def generate_insights(level, strategy, prices):
+def generate_insights(level, strategy):
     insights = []
     actions = []
 
     if level == "Low-cost":
-        insights.append("Competitor is aggressively priced for volume")
-        actions.append("Avoid competing purely on price — margins will suffer")
+        insights.append("Aggressive pricing targeting volume")
+        actions.append("Avoid price wars — focus on value")
 
     if level == "Mid-range":
-        insights.append("Balanced pricing suggests broad audience targeting")
-        actions.append("Differentiate clearly — don't stay in the middle")
+        insights.append("Balanced positioning for mass market")
+        actions.append("Differentiate clearly to stand out")
 
     if level == "Premium":
-        insights.append("Premium positioning focused on value perception")
-        actions.append("Compete via branding, trust, and added value")
+        insights.append("High-value perception strategy")
+        actions.append("Compete via branding and trust")
 
-    if "tiered" in strategy:
-        insights.append("Multiple pricing tiers indicate segmentation strategy")
-        actions.append("Introduce clear packages or bundles")
-
-    if len(prices) > 10:
-        insights.append("Wide product range detected")
-        actions.append("Focus on best-selling niche instead of everything")
-
-    if not insights:
-        insights.append("Limited data — competitor may hide pricing")
-        actions.append("Use transparency as your advantage")
+    if "Tiered" in strategy:
+        insights.append("Multiple pricing tiers indicate segmentation")
+        actions.append("Offer structured packages")
 
     return insights, actions
 
 # ----------------------------
-# BUTTON ACTION
+# RUN
 # ----------------------------
 if st.button("Analyze"):
 
-    with st.spinner("Analyzing competitor..."):
+    with st.spinner("Analyzing..."):
         prices = get_prices(url)
         level, price_range, strategy = analyze_prices(prices)
-        insights, actions = generate_insights(level, strategy, prices)
+        insights, actions = generate_insights(level, strategy)
 
-    st.markdown(f"## 🔍 Analyzing: {url}")
+    st.markdown(f"## 🔍 {url}")
 
     # ----------------------------
-    # SUMMARY CARDS
+    # SUMMARY
     # ----------------------------
     st.markdown("## 📊 Summary")
 
     col1, col2, col3 = st.columns(3)
 
-    with col1:
-        st.markdown(f"""
-        <div class="card highlight-green">
-            <div class="subtle">Positioning</div>
-            <div class="metric">{level}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    col1.markdown(f"""
+    <div class="card green">
+        <div class="label">Positioning</div>
+        <div class="metric">{level}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with col2:
-        st.markdown(f"""
-        <div class="card">
-            <div class="subtle">Price Range</div>
-            <div class="metric">{price_range}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    col2.markdown(f"""
+    <div class="card blue">
+        <div class="label">Price Range</div>
+        <div class="metric">{price_range}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with col3:
-        st.markdown(f"""
-        <div class="card highlight-orange">
-            <div class="subtle">Strategy</div>
-            <div class="metric">{strategy}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    col3.markdown(f"""
+    <div class="card orange">
+        <div class="label">Strategy</div>
+        <div class="metric">{strategy}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ----------------------------
-    # PRICES
+    # PRICES GRID
     # ----------------------------
     st.markdown("## 💰 Detected Prices")
 
     if prices:
-        for p in prices:
-            st.markdown(f"""
+        cols = st.columns(4)
+        for i, p in enumerate(prices):
+            cols[i % 4].markdown(f"""
             <div class="card">
-                {p}
+                <div class="price">{p}</div>
             </div>
             """, unsafe_allow_html=True)
     else:
@@ -224,7 +232,7 @@ if st.button("Analyze"):
 
     for i in insights:
         st.markdown(f"""
-        <div class="card highlight-green">
+        <div class="card green">
             {i}
         </div>
         """, unsafe_allow_html=True)
@@ -236,7 +244,7 @@ if st.button("Analyze"):
 
     for a in actions:
         st.markdown(f"""
-        <div class="card highlight-orange">
+        <div class="card orange">
             {a}
         </div>
         """, unsafe_allow_html=True)
