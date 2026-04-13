@@ -2,95 +2,147 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import re
-import os
-from openai import OpenAI
 
-# -----------------------------
-# 🔐 OpenAI setup (Streamlit secrets)
-# -----------------------------
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# --------------------------
+# PAGE CONFIG
+# --------------------------
+st.set_page_config(page_title="RivalLens", page_icon="🔎", layout="centered")
 
-# -----------------------------
-# 🔍 Price scraper
-# -----------------------------
+# --------------------------
+# HEADER
+# --------------------------
+st.title("RivalLens 🔎")
+st.markdown("### AI-powered competitor pricing intelligence")
+
+st.markdown("---")
+
+# --------------------------
+# INPUT SECTION
+# --------------------------
+st.subheader("🔗 Enter Competitor Website")
+
+url = st.text_input(
+    "",
+    placeholder="https://example.com or just domain (e.g. shop.com)"
+)
+
+analyze_btn = st.button("Analyze")
+
+# --------------------------
+# FUNCTIONS
+# --------------------------
 def get_prices(url):
     try:
         if not url.startswith("http"):
             url = "https://" + url
 
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers=headers, timeout=10)
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(res.text, "html.parser")
         text = soup.get_text()
 
-        prices = re.findall(r"\$\d+(?:\.\d{1,2})?", text)
+        prices = re.findall(r"\$\s?\d+(?:,\d{3})*(?:\.\d{2})?", text)
 
-        return prices[:10] if prices else ["No prices found"]
+        return list(set(prices))[:10] if prices else []
 
     except Exception as e:
         return [f"Error: {str(e)}"]
 
-# -----------------------------
-# 🤖 AI Analysis
-# -----------------------------
-def analyze_with_ai(url, prices):
-    try:
-        prompt = f"""
-        You are a business strategist.
 
-        Analyze this competitor:
+def analyze_pricing(prices):
+    numeric_prices = []
 
-        Website: {url}
-        Prices found: {prices}
+    for p in prices:
+        try:
+            value = float(p.replace("$", "").replace(",", ""))
+            numeric_prices.append(value)
+        except:
+            continue
 
-        Give:
-        1. Pricing strategy (premium, low-cost, etc)
-        2. Target market
-        3. Weaknesses
-        4. What I should do to beat them
-        """
+    if not numeric_prices:
+        return {
+            "level": "Unknown",
+            "range": "N/A",
+            "strategy": "No visible pricing"
+        }
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-        )
+    avg_price = sum(numeric_prices) / len(numeric_prices)
 
-        return response.choices[0].message.content
-
-    except Exception as e:
-        return f"AI Error: {str(e)}"
-
-# -----------------------------
-# 🎯 UI
-# -----------------------------
-st.set_page_config(page_title="RivalLens", page_icon="🔍")
-
-st.title("RivalLens 🔍")
-st.write("AI-powered competitor pricing intelligence")
-
-url = st.text_input("Enter competitor website")
-
-if st.button("Analyze"):
-    if not url:
-        st.warning("Enter a URL")
+    if avg_price < 50:
+        level = "Low-cost"
+    elif avg_price < 300:
+        level = "Mid-range"
     else:
-        st.write(f"Analyzing: {url}")
+        level = "Premium"
 
-        prices = get_prices(url)
+    return {
+        "level": level,
+        "range": f"${min(numeric_prices)} - ${max(numeric_prices)}",
+        "strategy": "Transparent pricing"
+    }
 
-        st.subheader("💰 Detected Prices")
+
+# --------------------------
+# MAIN LOGIC
+# --------------------------
+if analyze_btn and url:
+
+    st.markdown("---")
+    st.subheader(f"🔍 Analyzing: {url}")
+
+    prices = get_prices(url)
+
+    if not prices or "Error" in prices[0]:
+        st.error("❌ Could not extract pricing data")
+    else:
+        summary = analyze_pricing(prices)
+
+        # --------------------------
+        # 🔥 SUMMARY (TOP CARD)
+        # --------------------------
+        st.markdown("## 📊 Summary")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Pricing Level", summary["level"])
+        col2.metric("Price Range", summary["range"])
+        col3.metric("Strategy", summary["strategy"])
+
+        st.markdown("---")
+
+        # --------------------------
+        # 💰 DETECTED PRICES
+        # --------------------------
+        st.markdown("## 💰 Detected Prices")
         st.write(prices)
 
-        if "Error" in prices[0]:
-            st.error("Failed to fetch website")
+        st.markdown("---")
 
-        else:
-            st.subheader("🤖 AI Analysis")
+        # --------------------------
+        # 🧠 INSIGHTS
+        # --------------------------
+        st.markdown("## 🧠 Key Insights")
 
-            with st.spinner("Analyzing with AI..."):
-                result = analyze_with_ai(url, prices)
+        st.markdown(f"""
+        - Competitor uses **{summary['strategy']}**
+        - Positioned as **{summary['level']} market**
+        - Pricing spans **{summary['range']}**
+        - Likely targeting value-conscious vs premium buyers depending on range
+        """)
 
-            st.write(result)
+        st.markdown("---")
 
-        st.success("Done ✅")
+        # --------------------------
+        # 🚀 ACTION PLAN
+        # --------------------------
+        st.markdown("## 🚀 What You Should Do")
+
+        st.markdown("""
+        - Undercut slightly OR add more value (bundles, bonuses)
+        - Improve website clarity (pricing transparency wins conversions)
+        - Differentiate instead of competing only on price
+        - Use urgency/offers to outperform competitor positioning
+        """)
+
+        st.success("✅ Analysis Complete")
