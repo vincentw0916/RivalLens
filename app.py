@@ -2,52 +2,78 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import re
+import os
+from openai import OpenAI
 
 # -----------------------------
-# 🔍 Price Scraper (Improved)
+# 🔐 OpenAI setup (Streamlit secrets)
+# -----------------------------
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+# -----------------------------
+# 🔍 Price scraper
 # -----------------------------
 def get_prices(url):
     try:
-        # Auto-add https if missing
         if not url.startswith("http"):
             url = "https://" + url
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-
+        headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=10)
-
-        if response.status_code != 200:
-            return [f"Error: Website returned status {response.status_code}"]
 
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text()
 
-        # Find prices like $19.99
         prices = re.findall(r"\$\d+(?:\.\d{1,2})?", text)
 
-        return prices[:5] if prices else ["No prices found"]
+        return prices[:10] if prices else ["No prices found"]
 
     except Exception as e:
         return [f"Error: {str(e)}"]
 
+# -----------------------------
+# 🤖 AI Analysis
+# -----------------------------
+def analyze_with_ai(url, prices):
+    try:
+        prompt = f"""
+        You are a business strategist.
+
+        Analyze this competitor:
+
+        Website: {url}
+        Prices found: {prices}
+
+        Give:
+        1. Pricing strategy (premium, low-cost, etc)
+        2. Target market
+        3. Weaknesses
+        4. What I should do to beat them
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+        return f"AI Error: {str(e)}"
 
 # -----------------------------
-# 🎯 Streamlit UI
+# 🎯 UI
 # -----------------------------
 st.set_page_config(page_title="RivalLens", page_icon="🔍")
 
 st.title("RivalLens 🔍")
-st.write("AI-powered competitor pricing analysis")
+st.write("AI-powered competitor pricing intelligence")
 
-url = st.text_input(
-    "Enter competitor website (e.g. https://example.com or just domain)"
-)
+url = st.text_input("Enter competitor website")
 
 if st.button("Analyze"):
     if not url:
-        st.warning("Please enter a website URL")
+        st.warning("Enter a URL")
     else:
         st.write(f"Analyzing: {url}")
 
@@ -56,19 +82,15 @@ if st.button("Analyze"):
         st.subheader("💰 Detected Prices")
         st.write(prices)
 
-        # -----------------------------
-        # 📊 Basic Insights
-        # -----------------------------
         if "Error" in prices[0]:
             st.error("Failed to fetch website")
-        elif prices == ["No prices found"]:
-            st.info("No pricing detected (site may block scraping or use dynamic loading)")
-        else:
-            st.subheader("📊 Basic Insight")
 
-            st.write("• Competitor shows visible pricing")
-            st.write("• Likely targeting transparent pricing strategy")
-            st.write("• Consider undercutting or adding value bundles")
-            st.write("• Opportunity: differentiate instead of price war")
+        else:
+            st.subheader("🤖 AI Analysis")
+
+            with st.spinner("Analyzing with AI..."):
+                result = analyze_with_ai(url, prices)
+
+            st.write(result)
 
         st.success("Done ✅")
